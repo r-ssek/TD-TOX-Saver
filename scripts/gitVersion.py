@@ -4,15 +4,14 @@ import subprocess
 # NOTE define any supporting functions
 def GetVersioningInfo():
     # grab git information...
-    print("---> Version info")
+    # print("-> Version info")
     git_branch_process = subprocess.run(
         "git rev-parse --abbrev-ref HEAD", shell=True, capture_output=True)
     branch = str(git_branch_process.stdout, 'utf-8').strip()
     git_tag_process = subprocess.run(
         "git describe --tags", shell=True, capture_output=True)
     last_full_tag = str(git_tag_process.stdout, 'utf-8').strip()
-    print("---> Last full tag")
-    print(last_full_tag)
+    print(f"-> last full tag {last_full_tag}")
 
     tag_parts = last_full_tag.split('-')
     major_minor = tag_parts[0]
