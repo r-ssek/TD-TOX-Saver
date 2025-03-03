@@ -15,10 +15,10 @@ import listerFuncs
 
 class ExternalFiles:
     """
-        The ExternalFiles class is used to handle working with both 
-        externalizing files, as well as ingesting files that were previously 
-        externalized. This helps to minimize the amount of manual work that 
-        might need to otherwise be use for handling external files. 
+        The ExternalFiles class is used to handle working with both
+        externalizing files, as well as ingesting files that were previously
+        externalized. This helps to minimize the amount of manual work that
+        might need to otherwise be use for handling external files.
     """
     FLASH_DURATION = 14
     UNLOCK_TAGS = [
@@ -26,7 +26,7 @@ class ExternalFiles:
     ]
 
     def __init__(self, my_op: callable) -> None:
-        """Stands in place of an execute dat - ensures all elements start-up 
+        """Stands in place of an execute dat - ensures all elements start-up
         correctly
 
         Notes
@@ -39,7 +39,7 @@ class ExternalFiles:
 
         Returns
         ---------
-        none		
+        none
         """
 
         self.my_op = my_op
@@ -173,13 +173,13 @@ class ExternalFiles:
         Args
         ---------
         current_loc (str):
-        > the operator that's related to the currently focused 
+        > the operator that's related to the currently focused
         > pane object. This is required to ensure that we correctly
         > grab the appropriate COMP and check to see if needs to be saved
 
         Returns
         ---------
-        none		
+        none
         """
         current_loc = self.get_current_location
 
@@ -254,7 +254,7 @@ class ExternalFiles:
                         sav_msg_box_title,
                         sav_msg_box_msg,
                         buttons=sav_msg_box_buttons)
-                    
+
                     if save_ext == 1:
                         self.Save_tox(current_loc)
 
@@ -340,19 +340,38 @@ class ExternalFiles:
 
         return
 
-    def _save_tox(self, current_loc: str) -> None:
+    def _save_tox(self, current_loc):
         ext_color = self.Colors_map.get(
             "TouchDesigner").get("external_op").get("color")
         external_path = current_loc.par.externaltox
 
-        # Run pre-save event
-        self.preToxSave(current_loc)
+        # Create info dictionary for callbacks
+        tox_version = (
+            current_loc.par["Toxversion"] and current_loc.par["Toxversion"].eval()
+        )
+        tox_path = current_loc.par.externaltox.eval()
+
+        info = {
+            "path": tox_path,
+            "isNew": tox_path == "",
+            "comp": current_loc,
+            "version": tox_version,
+            "timestamp": saveUtils.current_save_time(),
+        }
+
+        # Execute pre-save callback
+        pre_save_result = self.my_op.DoCallback("onPreSave", info)
+
+        # Check if callback wants to abort the save
+        if pre_save_result and not pre_save_result.get("returnValue"):
+            self.Logtotextport("Save aborted by callback")
+            return
 
         # save tox
         current_loc.save(external_path)
 
-        # Run post-save event
-        self.postToxSave(current_loc)
+        # Execute post-save callback
+        self.my_op.DoCallback("onPostSave", info)
 
         # set color for COMP
         current_loc.color = (ext_color[0], ext_color[1], ext_color[2])
@@ -380,24 +399,11 @@ class ExternalFiles:
 
         self.Logtotextport(log_msg)
 
-    def preToxSave(self, tox):
-        """ pre tox save event handling """
-
-        for child in tox.findChildren(tags=['unlockOnSave']):
-            child.lock = False
-        return
-
-    def postToxSave(self, tox):
-        """ post tox save event handling """
-        for child in tox.findChildren(tags=['unlockOnSave']):
-            child.lock = True
-        return
-
     def alert_failed_dir_creation(self, **kwargs):
         op.TDResources.op('popDialog').Open(
             title="OVERWRITE WARNING",
             text="""It looks like there is an existing
-TOX in this directory. 
+TOX in this directory.
 
 Please check your to make sure
 this TOX does not already exist.
@@ -597,6 +603,27 @@ this TOX does not already exist.
         self.my_op.op('script1').cook(force=True)
         # open window for external tox files
         parent.save.op('window1').par.winopen.pulse()
+
+    def Create_callbacks_template(self):
+        template_example = self.my_op.op("base_save_callbacks")
+        target_comp = self.my_op.parent()
+
+        new_op = target_comp.copy(template_example, name="base_save_callbacks")
+
+        new_op.par.syncfile = False
+        new_op.par.file = ""
+
+        new_op.nodeX = self.my_op.nodeX
+        new_op.nodeY = self.my_op.nodeY - 100
+
+        new_op.color = ui.colors['OP.default']
+
+        # Don't dock or assign as callbacks dat if the parameter is populated
+        if self.my_op.par.Callbackdat.eval():
+            return
+
+        new_op.dock = self.my_op
+        self.my_op.par.Callbackdat = new_op
 
     def Keyboard_input(self, shortcut):
         """Keyboard input handler
